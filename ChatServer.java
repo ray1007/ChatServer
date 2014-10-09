@@ -68,17 +68,22 @@ public class ChatServer{
 						client.configureBlocking(false);
 						SelectionKey clientKey = client.register(selector, SelectionKey.OP_WRITE |
 																	  SelectionKey.OP_READ);
-						clientKey.attach(publicBus.duplicate());
+						//clientKey.attach(publicBus.duplicate());
 					}
 					if(key.isReadable() && !newMessage){ // get one client's InputStream.
 						SocketChannel client = (SocketChannel) key.channel();
+						newMessage = true;
+						//publicBus.flip();
+						client.read(publicBus);
+						publicBus.flip();
+						/*****
 						ByteBuffer buffer = (ByteBuffer) key.attachment();
 						newMessage = true;
-						publicBus.clear();
+						publicBus.flip();
 						
 						client.read(buffer);
 						buffer.flip();
-						
+						*****/
 						//client.read(publicBus);
 						System.out.println("BB "+readyKeys.size());
 						System.out.println("readable "+setSize);
@@ -88,10 +93,16 @@ public class ChatServer{
 					}
 					if(key.isWritable() && newMessage){ // write to one client's outputStream.
 						SocketChannel client = (SocketChannel) key.channel();
+						
+						client.write(publicBus);
+						publicBus.flip();
+						/*****
 						ByteBuffer buffer = (ByteBuffer) key.attachment();
 						
 						client.write(buffer);
-						buffer.flip();
+						buffer.compact();
+						//buffer.clear();
+						*****/
 						System.out.println("writeable "+setSize);
 						setSize--;
 						if(setSize == 0){
@@ -103,7 +114,7 @@ public class ChatServer{
 					System.out.println("some jumpin dog.");
 					setSize--;
 					key.cancel();
-					publicBus.clear();
+					//publicBus.clear();
 					try{
 						key.channel().close();
 					} catch(IOException cex){ cex.printStackTrace(); }
