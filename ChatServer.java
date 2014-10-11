@@ -29,128 +29,20 @@ public class ChatServer{
 	public static void main(String[] argv){
 		ChatServer chatServer = new ChatServer();
 		chatServer.start();
-		
-		ByteBuffer publicBus = ByteBuffer.allocate(4096);
-		ServerSocketChannel serverChannel;
-		Selector selector;
+		Conversation c = new Conversation(1, 3333);
+		Thread t = new Thread(c);
+		t.start();
+/*
+		char ch;
 		try{
-			serverChannel = ServerSocketChannel.open();
-			ServerSocket ss = serverChannel.socket();
-			ss.bind(new InetSocketAddress(3333));
-			serverChannel.configureBlocking(false);
-			selector = Selector.open();
-			serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+			while( (ch = (char) System.in.read()) != 's')
+				System.out.println(ch);
 		} catch(IOException ex){
 			ex.printStackTrace();
-			return;
 		}
-		boolean newMessage = false;
-		while(true){
-			try{ selector.select(); }
-			catch(IOException ex){ ex.printStackTrace(); break; }
-			
-			Set<SelectionKey> readyKeys = selector.selectedKeys();
-			Iterator<SelectionKey> iterator = readyKeys.iterator();
-			int setSize = readyKeys.size();
-
-			while(iterator.hasNext()){
-				//if(readyKeys.size() > 1)
-				//	System.out.println("BB "+readyKeys.size());
-				SelectionKey key = iterator.next();
-				iterator.remove();
-				
-				try{
-					
-					if(key.isAcceptable()){ // serverChannel accepts new connections.
-						ServerSocketChannel server = (ServerSocketChannel) key.channel();
-						SocketChannel client = server.accept();
-						System.out.println("Accepted connection from "+client);
-						client.configureBlocking(false);
-						SelectionKey clientKey = client.register(selector, SelectionKey.OP_WRITE |
-																	  SelectionKey.OP_READ);
-						//clientKey.attach(publicBus.duplicate());
-					}
-					if(key.isReadable() && !newMessage){ // get one client's InputStream.
-						SocketChannel client = (SocketChannel) key.channel();
-						newMessage = true;
-						//publicBus.flip();
-						client.read(publicBus);
-						publicBus.flip();
-						/*****
-						ByteBuffer buffer = (ByteBuffer) key.attachment();
-						newMessage = true;
-						publicBus.flip();
-						
-						client.read(buffer);
-						buffer.flip();
-						*****/
-						//client.read(publicBus);
-						System.out.println("BB "+readyKeys.size());
-						System.out.println("readable "+setSize);
-						
-						// breaks while(iterator.hasNext()) loop.
-						break; 
-					}
-					if(key.isWritable() && newMessage){ // write to one client's outputStream.
-						SocketChannel client = (SocketChannel) key.channel();
-						
-						client.write(publicBus);
-						publicBus.flip();
-						/*****
-						ByteBuffer buffer = (ByteBuffer) key.attachment();
-						
-						client.write(buffer);
-						buffer.compact();
-						//buffer.clear();
-						*****/
-						System.out.println("writeable "+setSize);
-						setSize--;
-						if(setSize == 0){
-							newMessage = false;
-							//publicBus.clear();
-						}
-					}
-				} catch(IOException ex){
-					System.out.println("some jumpin dog.");
-					setSize--;
-					key.cancel();
-					//publicBus.clear();
-					try{
-						key.channel().close();
-					} catch(IOException cex){ cex.printStackTrace(); }
-				}
-			}
-		}
-
-		/*try(ServerSocket server = new ServerSocket(3333)){
-			while(true){
-				try(Socket connection = server.accept()){
-					System.out.println("Port 3333 Accepted connection from "+ connection);
-					//Reader in  = new InputStreamReader(connection.getInputStream(), "UTF-8");
-					BufferedReader in = new BufferedReader(
-												new InputStreamReader(connection.getInputStream(), "UTF-8")
-											);
-					Writer out = new OutputStreamWriter(connection.getOutputStream(), "UTF-8");
-					StringBuilder sb = new StringBuilder();
-					Date now = new Date();
-					//int c;
-					//while((c = in.read()) != -1){
-					//	sb.append((char) c);
-						//System.out.println((char)c);
-					//}
-					String fragment;
-					while((fragment = in.readLine()) != null){
-						System.out.println("Some enytry...");
-						out.write(fragment+", "+now.toString());
-						out.flush();
-					}
-					System.out.println("ee");
-				} catch(IOException ex){}
-			}
-		} catch(IOException ex){
-			System.err.println(ex);
-		}
-		*/
+		System.out.println("stop");
+		c.stopThread();
+*/
 	}
 
 	private static class MainLoginThread extends Thread {
@@ -212,8 +104,7 @@ public class ChatServer{
 						out.write("Welcome! How was your head? I heard that you hit yourself last night.:) -- Archimedes.");
 						out.flush();
 						System.out.println("Login success. acc="+account+", pas="+password+"\r\n");
-					} else{
-						// Member not confirmed.
+					} else{// Member not confirmed.
 						out.write(0); // If client logined unsuccessfully, write back (byte)(int 0)
 						out.flush();
 						out.write("You are not a member yet. Sign up and enjoy! :) -- Archimedes.");
