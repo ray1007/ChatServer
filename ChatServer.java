@@ -29,10 +29,10 @@ public class ChatServer{
 	public static void main(String[] argv){
 		ChatServer chatServer = new ChatServer();
 		chatServer.start();
-		Conversation c = new Conversation(1, 3333);
+		Conversation c = new Conversation(1, 0);
 		Thread t = new Thread(c);
 		t.start();
-/*
+		System.out.println(c.getPort());
 		char ch;
 		try{
 			while( (ch = (char) System.in.read()) != 's')
@@ -42,7 +42,7 @@ public class ChatServer{
 		}
 		System.out.println("stop");
 		c.stopThread();
-*/
+
 	}
 
 	private static class MainLoginThread extends Thread {

@@ -11,6 +11,8 @@ public class Conversation implements Runnable {
 	private int _conversationID;
 	private  int _PORT;
 	private boolean _keepRunning;
+	private FileOutputStream _fout;
+	private String _dataFolderPathPrefix = "C:/Users/nmlab/ChatServerData/conv"+_conversationID+"_";
 	//private Vector<int> _memberIds;
 	//private ServerSocketChannel _serverChannel;
 
@@ -28,8 +30,8 @@ public class Conversation implements Runnable {
 	@Override
 	public void run(){
 		// The ByteBuffer for all the clients in this conversation.
-		ByteBuffer publicBus = ByteBuffer.allocate(10000);
-		ChatDataProcessor processor = new ChatDataProcessor();
+		ByteBuffer publicBus = ByteBuffer.allocate(1024*25);
+		//ChatDataProcessor processor = new ChatDataProcessor(1024*25);
 		ServerSocketChannel serverChannel;
 		Selector selector;
 		try{ // Open a ServerSocket, if error happens it should be handled.
@@ -44,15 +46,23 @@ public class Conversation implements Runnable {
 			ex.printStackTrace();
 			return;
 		}
-		// Flag used to control the read/write operations of clients.
-		boolean newMessage = false;
+		Vector<SocketChannel> clients = new Vector<SocketChannel>();
+		/*
+		try{
+			File file = new File("newFile");
+			if(!file.exists())
+				file.createNewFile();
+			_fout = new FileOutputStream(file);
+		}catch(IOException ex){
+			System.out.println("problem occured when contructing file");
+		}
+		*/
 		while(_keepRunning){
 			try{ selector.select(); }
 			catch(IOException ex){ ex.printStackTrace(); break; }
 			// Calls all the ready channels in keys.
 			Set<SelectionKey> readyKeys = selector.selectedKeys();
 			Iterator<SelectionKey> iterator = readyKeys.iterator();
-			int setSize = readyKeys.size();
 			// Traverse all the keys (channels).
 			while(iterator.hasNext() && _keepRunning){
 				SelectionKey key = iterator.next();
@@ -66,40 +76,69 @@ public class Conversation implements Runnable {
 						// Make clients able to read and write.
 						SelectionKey clientKey = client.register(selector, SelectionKey.OP_WRITE |
 																	  SelectionKey.OP_READ);
+						clients.addElement(client);
 					}
-					if(key.isReadable() && !newMessage){ // Get one client's InputStream.
+					if(key.isReadable()){ // Get one client's InputStream.
 						SocketChannel client = (SocketChannel) key.channel();
-						newMessage = true;
-						if(client.read(publicBus) == 0){
-							System.out.println("Some fuckin bad users who dont throw exceptions");
-							key.cancel();
-							try{ key.channel().close();
-							} catch(IOException cex){ cex.printStackTrace(); }
-							newMessage = false;
-							publicBus.clear();
-						} else { //If the channel read some data, flip the publicBus so the write operation could work.
+						
+						if( client.read(publicBus)>0 ) { // First read in.
 							publicBus.flip();
-							processor.parse(publicBus.duplicate());
-						}
-						// Breaks while(iterator.hasNext()) loop. A
-						break; 
-					}
-					if(key.isWritable() && newMessage){ // Write to one client's outputStream.
-						SocketChannel client = (SocketChannel) key.channel();
-						client.write(processor.getByteBuffer());
-						processor.getByteBuffer().flip();
-						//client.write(publicBus);
-						//publicBus.flip();
-						setSize--;
-						if(setSize == 0){
-							newMessage = false;
+							int dataType = publicBus.get();
+							int userId   = publicBus.getInt(1);
+							
+							// Preparation for each data type before entering the switch scope. 
+							if(dataType == 0)
+								publicBus.position(9);
+
+							if(dataType == 2){ // Data type : File. 
+							// Initialize File & FuileOutputStream.
+								int length   = publicBus.getInt(5);
+							// Get filename.
+								String filename = "newFile";
+								File file = new File(_dataFolderPathPrefix+filename);
+								if(!file.exists())
+									file.createNewFile();
+								_fout = new FileOutputStream(file);
+								publicBus.position(9);
+							}
+
+							switch(dataType){
+								case 0:
+									for(int i=0;i<clients.size();++i){
+										client.write(publicBus);
+										publicBus.flip();
+									}
+									break;
+								case 2:
+									_fout.getChannel().write(publicBus);
+							}
 							publicBus.clear();
+
+							while(client.read(publicBus)>0){
+								publicBus.flip();
+								switch(dataType){
+									case 0:
+										for(int i=0;i<clients.size();++i){
+											client.write(publicBus);
+											publicBus.flip();
+										}
+										break;
+									case 2:
+										_fout.getChannel().write(publicBus);
+								}
+								publicBus.clear();
+							}
+							// Write to file if the message is a file.
+							if(dataType == 2)
+								_fout.close();
 						}
+
+						//System.out.println("OUT");
 					}
 				} catch(IOException ex){
 					System.out.println("some jumpin dog.");
-					setSize--;
 					key.cancel();
+					clients.remove(key.channel());
 					try{
 						key.channel().close();
 					} catch(IOException cex){ cex.printStackTrace(); }
