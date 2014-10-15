@@ -1,7 +1,9 @@
-//package userver;
+package archimedesServer;
+
 import java.io.*;
 import java.nio.*;
 import java.nio.channels.*;
+import java.nio.charset.Charset;
 import java.util.*;
 import java.net.*;
 //import gui.*;
@@ -9,18 +11,23 @@ import java.net.*;
 public class Conversation implements Runnable {
 
 	private int _conversationID;
-	private  int _PORT;
+	private int _PORT;
 	private boolean _keepRunning;
+	private boolean _isPublic;
 	private FileOutputStream _fout;
 	private String _dataFolderPathPrefix = "C:/Users/nmlab/ChatServerData/conv"+_conversationID+"_";
+	private int _dataCount;
+	//private Vector<String> _record;
 	//private Vector<int> _memberIds;
 	//private ServerSocketChannel _serverChannel;
 
-	Conversation(int id, int port){
+	Conversation(boolean isPublic, int id, int port){
+		_isPublic = isPublic;
 		_conversationID = id;
 		_PORT = port;
 		_keepRunning = true;
-		//System.out.println("Conversation opened.");
+		_dataCount = 0;
+		System.out.println("Conversation "+id+" is opened.");
 	}
 
 	public int getPort(){ return _PORT; }
@@ -47,16 +54,6 @@ public class Conversation implements Runnable {
 			return;
 		}
 		Vector<SocketChannel> clients = new Vector<SocketChannel>();
-		/*
-		try{
-			File file = new File("newFile");
-			if(!file.exists())
-				file.createNewFile();
-			_fout = new FileOutputStream(file);
-		}catch(IOException ex){
-			System.out.println("problem occured when contructing file");
-		}
-		*/
 		while(_keepRunning){
 			try{ selector.select(); }
 			catch(IOException ex){ ex.printStackTrace(); break; }
@@ -81,31 +78,56 @@ public class Conversation implements Runnable {
 					if(key.isReadable()){ // Get one client's InputStream.
 						SocketChannel client = (SocketChannel) key.channel();
 						
-						if( client.read(publicBus)>0 ) { // First read in.
+						/*
+						// Add time stamp.
+						Date date = new Date();
+						byte[] timestamp = date.toString().getBytes(Charset.forName("UTF-8"));
+						publicBus.put(timestamp);
+						publicBus.flip();
+						for(int i=0;i<clients.size();++i){
+							clients.get(i).write(publicBus);
+							publicBus.flip();
+						}
+						publicBus.clear();
+						*/
+						int count;
+						if( (count=client.read(publicBus))>0 ) { // First read in.
+							System.out.println("First read in "+count+" bytes.");
 							publicBus.flip();
 							int dataType = publicBus.get();
 							int userId   = publicBus.getInt(1);
-							
+							int length   = 0;
+							byte[] filenameBytes = {};
+
 							// Preparation for each data type before entering the switch scope. 
 							if(dataType == 0)
 								publicBus.position(9);
 
 							if(dataType == 2){ // Data type : File. 
-							// Initialize File & FuileOutputStream.
-								int length   = publicBus.getInt(5);
-							// Get filename.
-								String filename = "newFile";
-								File file = new File(_dataFolderPathPrefix+filename);
+								// Get filename.
+								length = publicBus.getInt(5);
+								System.out.println("filename length "+length);
+								filenameBytes = new byte[length];
+								for(int i=0;i<length;++i){
+									filenameBytes[i] = publicBus.array()[i+9];
+								}
+								String filename = new String(filenameBytes, "UTF-8");
+								System.out.println(filename);
+							
+								// Initialize File & FuileOutputStream.
+								_dataCount++;
+								File file = new File(_dataFolderPathPrefix+_dataCount);
 								if(!file.exists())
 									file.createNewFile();
 								_fout = new FileOutputStream(file);
-								publicBus.position(9);
+								publicBus.position(9+length);
 							}
 
 							switch(dataType){
 								case 0:
 									for(int i=0;i<clients.size();++i){
-										client.write(publicBus);
+										publicBus.position(9);
+										clients.get(i).write(publicBus);
 										publicBus.flip();
 									}
 									break;
@@ -114,12 +136,13 @@ public class Conversation implements Runnable {
 							}
 							publicBus.clear();
 
-							while(client.read(publicBus)>0){
+							while( (count = client.read(publicBus))>0){
+								System.out.println("Read in "+count+" bytes.");
 								publicBus.flip();
 								switch(dataType){
 									case 0:
 										for(int i=0;i<clients.size();++i){
-											client.write(publicBus);
+											clients.get(i).write(publicBus);
 											publicBus.flip();
 										}
 										break;
@@ -128,9 +151,26 @@ public class Conversation implements Runnable {
 								}
 								publicBus.clear();
 							}
+
 							// Write to file if the message is a file.
-							if(dataType == 2)
+							// Also print out a message of file.
+							if(dataType == 2){
 								_fout.close();
+								// Write out file message.
+								publicBus.put((byte)2);
+								publicBus.putInt(userId);
+								publicBus.putInt(length);
+								publicBus.put(filenameBytes);
+								String serverFileCode = _conversationID+"_"+_dataCount;
+								publicBus.put(serverFileCode.getBytes(Charset.forName("UTF-8")));
+								
+								publicBus.flip();
+								for(int i=0;i<clients.size();++i){
+									clients.get(i).write(publicBus);
+									publicBus.flip();
+								}
+								publicBus.clear();
+							}
 						}
 
 						//System.out.println("OUT");
